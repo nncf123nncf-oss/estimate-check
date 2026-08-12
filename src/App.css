@@ -439,10 +439,12 @@
    ------------------------------------------------------------------ */
 /* 入力の誤りを、その項目の行のすぐ下に出す */
 .item-error {
+  list-style: none;
   font-size: 13px;
   font-weight: 400;
   color: var(--danger);
   margin: var(--s1) 0 0;
+  padding: 0;
 }
 
 .page-foot {

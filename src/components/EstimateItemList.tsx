@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EstimateItem } from '../types/estimate'
 import {
   MAX_QUANTITY,
@@ -44,11 +44,28 @@ function EstimateRow({
   const [quantityError, setQuantityError] = useState<string | undefined>()
   const [unitPriceError, setUnitPriceError] = useState<string | undefined>()
 
+  /**
+   * 編集を始める前の値を覚えておく。
+   *
+   * 打つそばから合計が変わる（＝途中の有効な値がその都度確定する）作りなので、
+   * 「300000」を消して「1.5」と打つと、`1` の時点で確定してしまう。
+   * そのまま欄を離れると、エラーだけ消えて `1` が残る＝金額が黙って変わる。
+   * これを防ぐため、欄を離れるときに誤りが残っていたら**値そのものを編集前に戻す**。
+   */
+  const originalQuantity = useRef(item.quantity)
+  const originalUnitPrice = useRef(item.unitPrice)
+
   // ステッパーなど、入力欄の外から数量が変わったときに表示を合わせる
   useEffect(() => {
     setQuantityText(String(item.quantity))
     setQuantityError(undefined)
   }, [item.quantity])
+
+  // 単価も同じように表示を合わせる（数量とふるまいを揃える）
+  useEffect(() => {
+    setUnitPriceText(String(item.unitPrice))
+    setUnitPriceError(undefined)
+  }, [item.unitPrice])
 
   const handleQuantityText = (text: string) => {
     setQuantityText(text)
@@ -66,6 +83,23 @@ function EstimateRow({
     if (!error) {
       onUnitPriceChange(item.id, Number(normalizeNumericInput(text)))
     }
+  }
+
+  /** 欄を離れたとき、誤りが残っていたら編集前の値に戻す */
+  const restoreQuantity = () => {
+    if (!quantityError) return
+    const original = originalQuantity.current
+    setQuantityError(undefined)
+    setQuantityText(String(original))
+    if (original !== item.quantity) onQuantityChange(item.id, original)
+  }
+
+  const restoreUnitPrice = () => {
+    if (!unitPriceError) return
+    const original = originalUnitPrice.current
+    setUnitPriceError(undefined)
+    setUnitPriceText(String(original))
+    if (original !== item.unitPrice) onUnitPriceChange(item.id, original)
   }
 
   const step = (delta: number) => {
@@ -104,12 +138,10 @@ function EstimateRow({
             aria-label="数量"
             aria-invalid={quantityError ? true : undefined}
             onChange={(e) => handleQuantityText(e.target.value)}
-            onBlur={() => {
-              if (quantityError) {
-                setQuantityText(String(item.quantity))
-                setQuantityError(undefined)
-              }
+            onFocus={() => {
+              originalQuantity.current = item.quantity
             }}
+            onBlur={restoreQuantity}
           />
           <button
             type="button"
@@ -132,12 +164,10 @@ function EstimateRow({
             aria-label={`${item.name}の単価`}
             aria-invalid={unitPriceError ? true : undefined}
             onChange={(e) => handleUnitPriceText(e.target.value)}
-            onBlur={() => {
-              if (unitPriceError) {
-                setUnitPriceText(String(item.unitPrice))
-                setUnitPriceError(undefined)
-              }
+            onFocus={() => {
+              originalUnitPrice.current = item.unitPrice
             }}
+            onBlur={restoreUnitPrice}
           />
         </label>
 
@@ -155,10 +185,12 @@ function EstimateRow({
         </button>
       </div>
 
+      {/* 数量と単価の両方が誤っているときは、両方見せる */}
       {(quantityError || unitPriceError) && (
-        <p className="item-error" role="alert">
-          {quantityError ?? unitPriceError}
-        </p>
+        <ul className="item-error" role="alert">
+          {quantityError && <li>{quantityError}</li>}
+          {unitPriceError && <li>{unitPriceError}</li>}
+        </ul>
       )}
     </li>
   )

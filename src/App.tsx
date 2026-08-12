@@ -97,7 +97,7 @@ function App() {
   const [discountValue, setDiscountValue] = useState(saved?.discountValue ?? '')
   const [taxRate, setTaxRate] = useState<number>(saved?.taxRate ?? 10)
   const [copied, setCopied] = useState(false)
-  const [fallbackText, setFallbackText] = useState<string | null>(null)
+  const [showFallback, setShowFallback] = useState(false)
   const fallbackRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -112,17 +112,26 @@ function App() {
   }, [items, discountMode, discountValue, taxRate])
 
   useEffect(() => {
-    if (fallbackText && fallbackRef.current) {
+    if (showFallback && fallbackRef.current) {
       fallbackRef.current.focus()
       fallbackRef.current.select()
     }
-  }, [fallbackText])
+  }, [showFallback])
 
   const subtotalOnly = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
   const discountCheck = validateDiscount(discountMode, discountValue, subtotalOnly)
   const effectiveDiscount = discountCheck.ok ? parseDiscountValue(discountValue) : 0
   const totals = calcTotals(items, discountMode, effectiveDiscount, taxRate)
   const canShare = items.length > 0 && discountCheck.ok
+  // 共有テキストは毎回いまの内容から作り直す。
+  // 一度作った文字列を持ち回すと、開いたまま編集したときに古い内訳が残る。
+  const shareText = buildShareText(
+    items,
+    totals,
+    discountMode,
+    effectiveDiscount,
+    taxRate,
+  )
 
   const handleAdd = (name: string, quantity: number, unitPrice: number) => {
     setItems((prev) => [
@@ -165,25 +174,18 @@ function App() {
   }
 
   const handleCopy = async () => {
-    const text = buildShareText(
-      items,
-      totals,
-      discountMode,
-      effectiveDiscount,
-      taxRate,
-    )
     try {
       if (!navigator.clipboard?.writeText) {
         throw new Error('clipboard unavailable')
       }
-      await navigator.clipboard.writeText(text)
-      setFallbackText(null)
+      await navigator.clipboard.writeText(shareText)
+      setShowFallback(false)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
       // コピーできない環境（権限拒否・http配信など）では、
       // 改行を保ったまま選べる形で画面に出す。
-      setFallbackText(text)
+      setShowFallback(true)
     }
   }
 
@@ -233,7 +235,7 @@ function App() {
         </button>
       </footer>
 
-      {fallbackText && (
+      {showFallback && (
         <div className="fallback">
           <p className="fallback-note">
             自動でコピーできませんでした。下の内訳を選んでコピーしてください。
@@ -243,13 +245,13 @@ function App() {
             className="fallback-text"
             readOnly
             rows={12}
-            value={fallbackText}
+            value={shareText}
             aria-label="内訳（選んでコピーしてください）"
           />
           <button
             type="button"
             className="copy-btn"
-            onClick={() => setFallbackText(null)}
+            onClick={() => setShowFallback(false)}
           >
             閉じる
           </button>
