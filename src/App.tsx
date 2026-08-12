@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DiscountMode, EstimateItem, TaxRate } from './types/estimate'
 import { TAX_RATES } from './types/estimate'
 import { EstimateForm } from './components/EstimateForm'
@@ -98,6 +98,8 @@ function App() {
   const [taxRate, setTaxRate] = useState<number>(saved?.taxRate ?? 10)
   const [copied, setCopied] = useState(false)
   const [showFallback, setShowFallback] = useState(false)
+  // 誤りのある行のid。誤った合計を「正しい体裁」で見せないために集める
+  const [rowErrors, setRowErrors] = useState<Record<string, boolean>>({})
   const fallbackRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -122,7 +124,8 @@ function App() {
   const discountCheck = validateDiscount(discountMode, discountValue, subtotalOnly)
   const effectiveDiscount = discountCheck.ok ? parseDiscountValue(discountValue) : 0
   const totals = calcTotals(items, discountMode, effectiveDiscount, taxRate)
-  const canShare = items.length > 0 && discountCheck.ok
+  const hasRowError = Object.values(rowErrors).some(Boolean)
+  const canShare = items.length > 0 && discountCheck.ok && !hasRowError
   // 共有テキストは毎回いまの内容から作り直す。
   // 一度作った文字列を持ち回すと、開いたまま編集したときに古い内訳が残る。
   const shareText = buildShareText(
@@ -162,7 +165,17 @@ function App() {
 
   const handleRemove = (id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id))
+    setRowErrors((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
   }
+
+  const handleValidityChange = useCallback((id: string, hasError: boolean) => {
+    setRowErrors((prev) => (prev[id] === hasError ? prev : { ...prev, [id]: hasError }))
+  }, [])
 
   /**
    * 値引きの単位を切り替えたら入力値を消す。
@@ -202,6 +215,7 @@ function App() {
         discountMode={discountMode}
         discountValue={discountValue}
         discountError={discountCheck.errors.discount}
+        valuesHidden={hasRowError}
         taxRate={taxRate}
         onDiscountModeChange={handleDiscountModeChange}
         onDiscountValueChange={setDiscountValue}
@@ -216,14 +230,15 @@ function App() {
           onQuantityChange={handleQuantityChange}
           onUnitPriceChange={handleUnitPriceChange}
           onRemove={handleRemove}
+          onValidityChange={handleValidityChange}
         />
 
         <EstimateForm onAdd={handleAdd} />
       </main>
 
       <footer className="page-foot">
-        {!discountCheck.ok && items.length > 0 && (
-          <p className="foot-note">値引きを直すと内訳をコピーできます</p>
+        {items.length > 0 && (!discountCheck.ok || hasRowError) && (
+          <p className="foot-note">入力の誤りを直すと内訳をコピーできます</p>
         )}
         <button
           type="button"

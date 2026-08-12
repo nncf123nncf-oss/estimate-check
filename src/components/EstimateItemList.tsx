@@ -14,6 +14,7 @@ interface Props {
   onQuantityChange: (id: string, quantity: number) => void
   onUnitPriceChange: (id: string, unitPrice: number) => void
   onRemove: (id: string) => void
+  onValidityChange: (id: string, hasError: boolean) => void
 }
 
 interface RowProps {
@@ -21,6 +22,7 @@ interface RowProps {
   onQuantityChange: (id: string, quantity: number) => void
   onUnitPriceChange: (id: string, unitPrice: number) => void
   onRemove: (id: string) => void
+  onValidityChange: (id: string, hasError: boolean) => void
 }
 
 /**
@@ -38,6 +40,7 @@ function EstimateRow({
   onQuantityChange,
   onUnitPriceChange,
   onRemove,
+  onValidityChange,
 }: RowProps) {
   const [quantityText, setQuantityText] = useState(String(item.quantity))
   const [unitPriceText, setUnitPriceText] = useState(String(item.unitPrice))
@@ -55,14 +58,24 @@ function EstimateRow({
   const originalQuantity = useRef(item.quantity)
   const originalUnitPrice = useRef(item.unitPrice)
 
-  // ステッパーなど、入力欄の外から数量が変わったときに表示を合わせる
+  const quantityRef = useRef<HTMLInputElement | null>(null)
+  const unitPriceRef = useRef<HTMLInputElement | null>(null)
+
+  /**
+   * ステッパーなど、入力欄の外から値が変わったときに表示を合わせる。
+   *
+   * ただし**その欄を打っている最中は書き戻さない**。
+   * 書き戻すと「1,500」のカンマが打つそばから消え、文字列の途中を直したときに
+   * カーソルが末尾へ飛ぶ（続けて打った文字が別の場所に入る）。
+   */
   useEffect(() => {
+    if (document.activeElement === quantityRef.current) return
     setQuantityText(String(item.quantity))
     setQuantityError(undefined)
   }, [item.quantity])
 
-  // 単価も同じように表示を合わせる（数量とふるまいを揃える）
   useEffect(() => {
+    if (document.activeElement === unitPriceRef.current) return
     setUnitPriceText(String(item.unitPrice))
     setUnitPriceError(undefined)
   }, [item.unitPrice])
@@ -102,6 +115,36 @@ function EstimateRow({
     if (original !== item.unitPrice) onUnitPriceChange(item.id, original)
   }
 
+  /**
+   * 欄を離れないままページが終わる経路（タブを閉じる・スマホでアプリを切り替える・
+   * 裏に回って破棄される）でも、途中で確定した誤った値を残さない。
+   * blur だけを塞ぐと「30万円が1円のまま保存されて気づく手がかりが無い」状態が残る。
+   * 依存配列を付けず毎描画で貼り直し、常に最新の値を見るようにする。
+   */
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') {
+        restoreQuantity()
+        restoreUnitPrice()
+      }
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onHide)
+    }
+  })
+
+  // 行に誤りがあるかを親へ伝える（誤った合計を正しい体裁で見せないため）
+  useEffect(() => {
+    onValidityChange(item.id, Boolean(quantityError || unitPriceError))
+  }, [item.id, quantityError, unitPriceError, onValidityChange])
+
+  useEffect(() => {
+    return () => onValidityChange(item.id, false)
+  }, [item.id, onValidityChange])
+
   const step = (delta: number) => {
     const next = item.quantity + delta
     if (next < 1 || next > MAX_QUANTITY) return
@@ -131,6 +174,7 @@ function EstimateRow({
             −
           </button>
           <input
+            ref={quantityRef}
             className={`stepper-value${quantityError ? ' is-error' : ''}`}
             type="text"
             inputMode="numeric"
@@ -157,6 +201,7 @@ function EstimateRow({
         <label className={`unit-field${unitPriceError ? ' is-error' : ''}`}>
           <span className="unit-mark">¥</span>
           <input
+            ref={unitPriceRef}
             className="unit-input"
             type="text"
             inputMode="numeric"
@@ -187,10 +232,12 @@ function EstimateRow({
 
       {/* 数量と単価の両方が誤っているときは、両方見せる */}
       {(quantityError || unitPriceError) && (
-        <ul className="item-error" role="alert">
-          {quantityError && <li>{quantityError}</li>}
-          {unitPriceError && <li>{unitPriceError}</li>}
-        </ul>
+        <div role="alert">
+          <ul className="item-error">
+            {quantityError && <li>{quantityError}</li>}
+            {unitPriceError && <li>{unitPriceError}</li>}
+          </ul>
+        </div>
       )}
     </li>
   )
@@ -201,6 +248,7 @@ export function EstimateItemList({
   onQuantityChange,
   onUnitPriceChange,
   onRemove,
+  onValidityChange,
 }: Props) {
   if (items.length === 0) {
     return (
@@ -219,6 +267,7 @@ export function EstimateItemList({
           onQuantityChange={onQuantityChange}
           onUnitPriceChange={onUnitPriceChange}
           onRemove={onRemove}
+          onValidityChange={onValidityChange}
         />
       ))}
     </ul>

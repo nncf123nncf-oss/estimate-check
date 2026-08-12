@@ -8,6 +8,8 @@ interface Props {
   discountMode: DiscountMode
   discountValue: string
   discountError?: string
+  /** 項目の入力に誤りがあるあいだは金額を伏せる（誤った金額を正しい体裁で見せない） */
+  valuesHidden?: boolean
   taxRate: number
   onDiscountModeChange: (mode: DiscountMode) => void
   onDiscountValueChange: (value: string) => void
@@ -28,18 +30,23 @@ export function EstimateSummary({
   discountMode,
   discountValue,
   discountError,
+  valuesHidden = false,
   taxRate,
   onDiscountModeChange,
   onDiscountValueChange,
   onTaxRateChange,
 }: Props) {
-  const invalid = Boolean(discountError)
+  const discountInvalid = Boolean(discountError)
+  const invalid = discountInvalid || valuesHidden
 
   return (
     <section className="summary" aria-label="金額の内訳">
       <div className="summary-row">
         <span className="summary-label">小計</span>
-        <span className="summary-value">{formatCurrency(totals.subtotal)}</span>
+        {/* 項目の入力が誤っているときは小計も伏せる（値引きの誤りとは別で、小計自体が誤るため） */}
+        <span className="summary-value">
+          {valuesHidden ? BLANK : formatCurrency(totals.subtotal)}
+        </span>
       </div>
 
       {/* 値引き行: ラベル / 金額・％の切替 / 入力欄 の3列（設計仕様 7章 確定3） */}
@@ -64,13 +71,13 @@ export function EstimateSummary({
           </button>
         </div>
         <input
-          className={`discount-input${invalid ? ' is-error' : ''}`}
+          className={`discount-input${discountInvalid ? ' is-error' : ''}`}
           type="text"
           inputMode="numeric"
           value={discountValue}
           placeholder="0"
           aria-label={discountMode === 'percent' ? '値引き率' : '値引き額'}
-          aria-invalid={invalid ? true : undefined}
+          aria-invalid={discountInvalid ? true : undefined}
           onChange={(e) => onDiscountValueChange(e.target.value)}
         />
       </div>
@@ -132,7 +139,7 @@ export function EstimateSummary({
 
       <p className="summary-note">
         {invalid
-          ? '値引きを直すと金額を表示します'
+          ? '入力の誤りを直すと金額を表示します'
           : '消費税は1円未満を切り捨てて計算しています'}
       </p>
     </section>
