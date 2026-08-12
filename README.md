@@ -1,32 +1,50 @@
-# React + TypeScript + Vite
+# 見積もりそろばん
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+見積もり項目を足すたびに、合計がその場で変わる計算道具です。
 
-Currently, two official plugins are available:
+制作・修理・コンサル業の個人事業主が、現場や電話口で「これも足して」「数量を2つに」と言われるたびに
+数量・単価・値引き・税を計算し直す——その手間をなくすために作りました。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## できること
 
-## React Compiler
+- 見積もり項目（項目名・数量・単価）を追加する
+- 数量を＋−ボタンで増減する／単価をその場で書き換える
+- 項目ごとの金額と小計を自動で計算する
+- 値引きを「金額」でも「％」でも指定する
+- 消費税率を 10% / 8% / 0% から選ぶ
+- 合計金額を常に画面上部に表示する
+- 項目を削除する（確認あり）
+- 顧客へそのまま送れる内訳のテキストを作り、1タップでコピーする
+- 空欄・0・負数などの入力の誤りをその場で知らせる
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 計算のしかた
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+小計 − 値引き = 税抜き金額
+税抜き金額 + 消費税 = 合計金額
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+端数処理:
+
+- 数量・単価・値引き（金額指定）: 整数のみ受け付けるため、丸めは発生しません
+- 値引き（％指定）: 四捨五入
+- 消費税: 1円未満を切り捨て
+
+## 使っている技術
+
+React / TypeScript / CSS / Clipboard API / Vite
+
+入力した内容はブラウザの中（localStorage）にだけ保存されます。外部に送信しません。
+
+## 開発
+
+```bash
+npm install
+npm run dev     # 開発サーバー
+npm run build   # docs/ に本番ビルドを出力
+```
+
+## 100日100プロダクトチャレンジ
+
+「困りごとを解決する道具を1日1つ作る」チャレンジの Day008 です。
+一覧: https://nncf123nncf-oss.github.io/100days/

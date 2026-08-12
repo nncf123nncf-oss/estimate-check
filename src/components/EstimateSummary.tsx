@@ -14,6 +14,9 @@ interface Props {
   onTaxRateChange: (rate: number) => void
 }
 
+/** 値引きの入力が誤っている間は金額を出さない（誤った金額を正しい体裁で見せないため） */
+const BLANK = '—'
+
 /**
  * サマリ帯（設計仕様 4章①）。
  * 常に画面上部に固定し、「項目を1つ足しては合計が変わるのを確かめる」を成立させる。
@@ -30,6 +33,8 @@ export function EstimateSummary({
   onDiscountValueChange,
   onTaxRateChange,
 }: Props) {
+  const invalid = Boolean(discountError)
+
   return (
     <section className="summary" aria-label="金額の内訳">
       <div className="summary-row">
@@ -37,7 +42,7 @@ export function EstimateSummary({
         <span className="summary-value">{formatCurrency(totals.subtotal)}</span>
       </div>
 
-      {/* 値引き行: ラベル / 金額・％の切替 / 入力欄 の3列（7章 確定3） */}
+      {/* 値引き行: ラベル / 金額・％の切替 / 入力欄 の3列（設計仕様 7章 確定3） */}
       <div className="summary-row summary-row--discount">
         <span className="summary-label">値引き</span>
         <div className="discount-mode" role="group" aria-label="値引きの指定方法">
@@ -59,15 +64,22 @@ export function EstimateSummary({
           </button>
         </div>
         <input
-          className={`discount-input${discountError ? ' is-error' : ''}`}
+          className={`discount-input${invalid ? ' is-error' : ''}`}
           type="text"
           inputMode="numeric"
           value={discountValue}
           placeholder="0"
           aria-label={discountMode === 'percent' ? '値引き率' : '値引き額'}
-          aria-invalid={discountError ? true : undefined}
+          aria-invalid={invalid ? true : undefined}
           onChange={(e) => onDiscountValueChange(e.target.value)}
         />
+      </div>
+
+      {/* 値引きの実額。画面と共有テキストで数字が食い違わないよう、必ず表示する */}
+      <div className="summary-subrow">
+        <span className="summary-sub-value">
+          {invalid ? BLANK : `−${formatCurrency(totals.discountAmount)}`}
+        </span>
       </div>
 
       {discountError && (
@@ -83,11 +95,11 @@ export function EstimateSummary({
           <div className="summary-row">
             <span className="summary-label">税抜き金額</span>
             <span className="summary-value">
-              {formatCurrency(totals.taxableAmount)}
+              {invalid ? BLANK : formatCurrency(totals.taxableAmount)}
             </span>
           </div>
 
-          {/* 消費税行: ラベル / 税率プルダウン / 税額 の3列（検算①で解消した箇所） */}
+          {/* 消費税行: ラベル / 税率プルダウン / 税額 の3列（検算①の🔴を解消した箇所） */}
           <div className="summary-row summary-row--tax">
             <span className="summary-label">消費税</span>
             <select
@@ -102,7 +114,9 @@ export function EstimateSummary({
                 </option>
               ))}
             </select>
-            <span className="summary-value">{formatCurrency(totals.taxAmount)}</span>
+            <span className="summary-value">
+              {invalid ? BLANK : formatCurrency(totals.taxAmount)}
+            </span>
           </div>
 
           <div className="summary-divider" />
@@ -111,10 +125,16 @@ export function EstimateSummary({
 
       <div className="summary-row summary-row--total">
         <span className="summary-label">合計</span>
-        <span className="summary-total">{formatCurrency(totals.total)}</span>
+        <span className="summary-total">
+          {invalid ? BLANK : formatCurrency(totals.total)}
+        </span>
       </div>
 
-      <p className="summary-note">消費税は1円未満を切り捨てて計算しています</p>
+      <p className="summary-note">
+        {invalid
+          ? '値引きを直すと金額を表示します'
+          : '消費税は1円未満を切り捨てて計算しています'}
+      </p>
     </section>
   )
 }

@@ -9,13 +9,46 @@ import { formatCurrency, formatNumber } from './formatCurrency'
 /**
  * 端数処理の方針（この1箇所に集約する）
  *
- * - 行の金額 : 数量 × 単価。どちらも整数で入力させるため端数は発生しない
- * - 値引き（％）: 小計 × 率 ÷ 100 を四捨五入（Math.round）
- * - 消費税     : 税抜き金額 × 率 ÷ 100 を切り捨て（Math.floor）
+ * - 行の金額     : 数量 × 単価。どちらも整数しか受け付けないため端数は発生しない
+ * - 値引き（金額）: 整数しか受け付けないため丸めは発生しない
+ * - 値引き（％）  : 小計 × 率 ÷ 100 を四捨五入（Math.round）
+ * - 消費税        : 税抜き金額 × 率 ÷ 100 を切り捨て（Math.floor）
  *
  * 消費税を切り捨てにしているのは、日本の実務で端数を切り捨てる扱いが広く使われているため。
  * 「どちらで計算しているか分からない」状態を避けるため、画面にも注記を出す。
  */
+
+/** 入力できる上限。これを超えると桁あふれで合計が合わなくなるため、検証で弾く */
+export const MAX_QUANTITY = 100_000
+export const MAX_UNIT_PRICE = 1_000_000_000
+
+/**
+ * 入力文字列の正規化。
+ * 全角数字・カンマ区切り・全角記号を、そのまま受け付けられる形に直す。
+ * 「数字を入れているのに数字で入力してくださいと言われる」を防ぐため、
+ * 弾くのではなく直してあげる方針にする。
+ */
+export function normalizeNumericInput(raw: string): string {
+  return raw
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[，,]/g, '')
+    .replace(/[．]/g, '.')
+    .replace(/[－ー−–—]/g, '-')
+    .replace(/[％%]/g, '')
+    .replace(/[¥￥]/g, '')
+    .trim()
+}
+
+/**
+ * 正規化した文字列が「数字だけで書かれているか」を判定する。
+ * Number() をそのまま使うと `1e5`・`0x1f`・`Infinity` が通ってしまうため、
+ * 形そのものを正規表現で確かめる。
+ */
+const NUMERIC_PATTERN = /^-?\d+(\.\d+)?$/
+
+function isNumericText(text: string): boolean {
+  return NUMERIC_PATTERN.test(text)
+}
 
 /** 1項目の金額 */
 export function calcLineAmount(item: EstimateItem): number {
@@ -37,7 +70,7 @@ export function calcDiscountAmount(
   const raw =
     discountMode === 'percent'
       ? Math.round((subtotal * discountValue) / 100)
-      : Math.round(discountValue)
+      : discountValue
   // 値引きが小計を超えても税抜き金額をマイナスにしない（表示は0円で止める）
   return Math.min(Math.max(raw, 0), subtotal)
 }
@@ -61,9 +94,44 @@ export function calcTotals(
   return { subtotal, discountAmount, taxableAmount, taxAmount, total }
 }
 
+/** 数量1つ分の検証。追加フォームとインライン編集の両方がこれを通る */
+export function validateQuantity(raw: string): string | undefined {
+  const text = normalizeNumericInput(raw)
+  if (text === '') return '数量を入力してください'
+  if (!isNumericText(text)) return '数量は数字で入力してください'
+
+  const value = Number(text)
+  if (value < 0) return '数量にマイナスは使えません'
+  if (value === 0) return '数量は1以上にしてください'
+  if (!Number.isInteger(value)) return '数量は整数で入力してください'
+  if (value > MAX_QUANTITY) {
+    return `数量は${formatNumber(MAX_QUANTITY)}までにしてください`
+  }
+  return undefined
+}
+
+/** 単価1つ分の検証。追加フォームとインライン編集の両方がこれを通る */
+export function validateUnitPrice(raw: string): string | undefined {
+  const text = normalizeNumericInput(raw)
+  if (text === '') return '単価を入力してください'
+  if (!isNumericText(text)) return '単価は数字で入力してください'
+
+  const value = Number(text)
+  if (value < 0) return '単価にマイナスは使えません'
+  if (value === 0) return '単価は1以上にしてください'
+  if (!Number.isInteger(value)) return '単価は1円単位で入力してください'
+  if (value > MAX_UNIT_PRICE) {
+    return `単価は${formatCurrency(MAX_UNIT_PRICE)}までにしてください`
+  }
+  return undefined
+}
+
 /**
  * 項目の入力検証。空欄・0・負数をここで判定する。
  * 入力欄は文字列のまま受け取る（「空欄」と「0」を区別するため）。
+ *
+ * この関数は追加フォームと一覧のインライン編集の**両方**が通る。
+ * 経路ごとに検証を書き分けると、片方だけ緩い状態が必ず生まれる。
  */
 export function validateItemInput(
   name: string,
@@ -76,31 +144,11 @@ export function validateItemInput(
     errors.name = '項目名を入力してください'
   }
 
-  const qty = Number(quantity)
-  if (quantity.trim() === '') {
-    errors.quantity = '数量を入力してください'
-  } else if (!Number.isFinite(qty)) {
-    errors.quantity = '数量は数字で入力してください'
-  } else if (qty < 0) {
-    errors.quantity = '数量にマイナスは使えません'
-  } else if (qty === 0) {
-    errors.quantity = '数量は1以上にしてください'
-  } else if (!Number.isInteger(qty)) {
-    errors.quantity = '数量は整数で入力してください'
-  }
+  const quantityError = validateQuantity(quantity)
+  if (quantityError) errors.quantity = quantityError
 
-  const price = Number(unitPrice)
-  if (unitPrice.trim() === '') {
-    errors.unitPrice = '単価を入力してください'
-  } else if (!Number.isFinite(price)) {
-    errors.unitPrice = '単価は数字で入力してください'
-  } else if (price < 0) {
-    errors.unitPrice = '単価にマイナスは使えません'
-  } else if (price === 0) {
-    errors.unitPrice = '単価は1以上にしてください'
-  } else if (!Number.isInteger(price)) {
-    errors.unitPrice = '単価は1円単位で入力してください'
-  }
+  const unitPriceError = validateUnitPrice(unitPrice)
+  if (unitPriceError) errors.unitPrice = unitPriceError
 
   return { ok: Object.keys(errors).length === 0, errors }
 }
@@ -112,13 +160,22 @@ export function validateDiscount(
   subtotal: number,
 ): ValidationResult {
   const errors: Record<string, string> = {}
-  if (discountValue.trim() === '') return { ok: true, errors }
+  const text = normalizeNumericInput(discountValue)
+  if (text === '') return { ok: true, errors }
 
-  const value = Number(discountValue)
-  if (!Number.isFinite(value)) {
+  if (!isNumericText(text)) {
     errors.discount = '値引きは数字で入力してください'
-  } else if (value < 0) {
+    return { ok: false, errors }
+  }
+
+  const value = Number(text)
+  if (value < 0) {
     errors.discount = '値引きにマイナスは使えません'
+  } else if (!Number.isInteger(value)) {
+    errors.discount =
+      discountMode === 'percent'
+        ? '値引きの割合は整数で入力してください'
+        : '値引きは1円単位で入力してください'
   } else if (discountMode === 'percent' && value > 100) {
     errors.discount = '値引きは100%までです'
   } else if (discountMode === 'amount' && value > subtotal) {
@@ -126,6 +183,13 @@ export function validateDiscount(
   }
 
   return { ok: Object.keys(errors).length === 0, errors }
+}
+
+/** 検証を通った値引き入力を数値にする */
+export function parseDiscountValue(discountValue: string): number {
+  const text = normalizeNumericInput(discountValue)
+  if (text === '' || !isNumericText(text)) return 0
+  return Number(text)
 }
 
 /**

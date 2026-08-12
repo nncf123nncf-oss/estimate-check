@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ローカルの開発用設定（プレビューサーバー定義）
+.claude/
+
+# 秘密情報
+.env
+.env.*

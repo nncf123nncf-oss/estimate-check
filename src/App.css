@@ -112,8 +112,8 @@
 }
 
 .mode-btn {
-  width: 34px;
-  height: 32px;
+  width: 44px;
+  height: 40px;
   border: 0;
   background: var(--surface);
   color: var(--text-2);
@@ -136,7 +136,7 @@
 .discount-input {
   flex: 0 0 auto;
   width: 96px;
-  height: 32px;
+  height: 40px;
   padding: 0 var(--s1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
@@ -151,16 +151,41 @@
 /* 消費税行: ラベル / 税率プルダウン / 税額 の3列（検算①の🔴を解消した箇所） */
 .tax-select {
   flex: 0 0 auto;
-  width: 72px;
-  height: 32px;
-  padding: 0 var(--s1);
+  width: 76px;
+  height: 40px;
+  padding: 0 22px 0 var(--s1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  background: var(--surface);
+  background-color: var(--surface);
   color: var(--text-1);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  /* ネイティブの矢印を消して1つだけ描く（矢印の二重表示を防ぐ） */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* 値引きの実額を出す行（画面と共有テキストの数字を一致させるため） */
+.summary-subrow {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 22px;
+}
+
+.summary-sub-value {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--discount);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 .is-error {
@@ -412,10 +437,55 @@
 /* ------------------------------------------------------------------
    締めの操作（内訳コピー）。主役ではないので右寄せの控えめなボタン
    ------------------------------------------------------------------ */
+/* 入力の誤りを、その項目の行のすぐ下に出す */
+.item-error {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--danger);
+  margin: var(--s1) 0 0;
+}
+
 .page-foot {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: var(--s1);
   margin-top: var(--s3);
+}
+
+.foot-note {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+/* コピーできない環境用。改行を保ったまま選べる形で内訳を出す */
+.fallback {
+  margin-top: var(--s2);
+  padding: var(--s2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+}
+
+.fallback-note {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 var(--s1);
+}
+
+.fallback-text {
+  width: 100%;
+  padding: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunk);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  margin-bottom: var(--s1);
 }
 
 .copy-btn {

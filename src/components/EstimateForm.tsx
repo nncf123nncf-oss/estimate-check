@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { validateItemInput } from '../utils/calculation'
+import { normalizeNumericInput, validateItemInput } from '../utils/calculation'
 
 interface Props {
   onAdd: (name: string, quantity: number, unitPrice: number) => void
@@ -22,7 +22,12 @@ export function EstimateForm({ onAdd }: Props) {
     setErrors(result.errors)
     if (!result.ok) return
 
-    onAdd(name.trim(), Number(quantity), Number(unitPrice))
+    // 全角数字やカンマ区切りで打たれていても、正規化してから数値にする
+    onAdd(
+      name.trim(),
+      Number(normalizeNumericInput(quantity)),
+      Number(normalizeNumericInput(unitPrice)),
+    )
     setName('')
     setQuantity('1')
     setUnitPrice('')
