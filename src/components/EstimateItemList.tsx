@@ -182,6 +182,10 @@ function EstimateRow({
   const step = (delta: number) => {
     const next = item.quantity + delta
     if (next < 1 || next > MAX_QUANTITY) return
+    // ボタンで意図して変えた値は「編集前の値」として扱う。
+    // ここを更新しないと、その後の打ち間違いで復帰したときに、
+    // ボタンで増やした分まで一緒に巻き戻ってしまう。
+    originalQuantity.current = next
     onQuantityChange(item.id, next)
   }
 
