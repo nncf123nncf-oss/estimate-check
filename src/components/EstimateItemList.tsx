@@ -15,6 +15,8 @@ interface Props {
   onUnitPriceChange: (id: string, unitPrice: number) => void
   onRemove: (id: string) => void
   onValidityChange: (id: string, hasError: boolean) => void
+  /** 画面が終わる直前に使う。状態更新を待たず、その場で保存まで済ませる */
+  onRestoreNow: (id: string, patch: Partial<EstimateItem>) => void
 }
 
 interface RowProps {
@@ -23,7 +25,11 @@ interface RowProps {
   onUnitPriceChange: (id: string, unitPrice: number) => void
   onRemove: (id: string) => void
   onValidityChange: (id: string, hasError: boolean) => void
+  onRestoreNow: (id: string, patch: Partial<EstimateItem>) => void
 }
+
+/** 入力の誤りで金額を伏せるときの表示 */
+const BLANK = '—'
 
 /**
  * 項目1件（設計仕様 4章② / 5章の検算の結論）。
@@ -31,9 +37,6 @@ interface RowProps {
  * 1段目 = 識別情報の段（項目名・金額）
  * 2段目 = 操作の段（数量ステッパー・単価・削除）
  * 1段に詰めると375pxで項目名が79pxまで潰れるため、この2段構成は動かさない。
- *
- * 入力は「編集中の文字列」を state で持ち、追加フォームと同じ検証関数を通してから
- * 数値として確定する。経路ごとに検証を書き分けない（片方だけ緩くなるため）。
  */
 function EstimateRow({
   item,
@@ -41,6 +44,7 @@ function EstimateRow({
   onUnitPriceChange,
   onRemove,
   onValidityChange,
+  onRestoreNow,
 }: RowProps) {
   const [quantityText, setQuantityText] = useState(String(item.quantity))
   const [unitPriceText, setUnitPriceText] = useState(String(item.unitPrice))
@@ -58,24 +62,27 @@ function EstimateRow({
   const originalQuantity = useRef(item.quantity)
   const originalUnitPrice = useRef(item.unitPrice)
 
-  const quantityRef = useRef<HTMLInputElement | null>(null)
-  const unitPriceRef = useRef<HTMLInputElement | null>(null)
-
   /**
-   * ステッパーなど、入力欄の外から値が変わったときに表示を合わせる。
+   * 自分がこの欄から確定させた値。
    *
-   * ただし**その欄を打っている最中は書き戻さない**。
-   * 書き戻すと「1,500」のカンマが打つそばから消え、文字列の途中を直したときに
-   * カーソルが末尾へ飛ぶ（続けて打った文字が別の場所に入る）。
+   * 表示の書き戻しを「フォーカスが当たっているか」で止めると、
+   * ボタンを押してもフォーカスが動かないブラウザで、箱の数字と実際の数量がずれたまま戻らない。
+   * 「自分が出した変更か、外から来た変更か」で判断すれば、フォーカスの扱いに左右されない。
    */
+  const lastCommittedQuantity = useRef(item.quantity)
+  const lastCommittedUnitPrice = useRef(item.unitPrice)
+
+  // 外から数量が変わったとき（ステッパー・復帰処理）だけ表示を合わせる
   useEffect(() => {
-    if (document.activeElement === quantityRef.current) return
+    if (item.quantity === lastCommittedQuantity.current) return
+    lastCommittedQuantity.current = item.quantity
     setQuantityText(String(item.quantity))
     setQuantityError(undefined)
   }, [item.quantity])
 
   useEffect(() => {
-    if (document.activeElement === unitPriceRef.current) return
+    if (item.unitPrice === lastCommittedUnitPrice.current) return
+    lastCommittedUnitPrice.current = item.unitPrice
     setUnitPriceText(String(item.unitPrice))
     setUnitPriceError(undefined)
   }, [item.unitPrice])
@@ -85,7 +92,9 @@ function EstimateRow({
     const error = validateQuantity(text)
     setQuantityError(error)
     if (!error) {
-      onQuantityChange(item.id, Number(normalizeNumericInput(text)))
+      const value = Number(normalizeNumericInput(text))
+      lastCommittedQuantity.current = value
+      onQuantityChange(item.id, value)
     }
   }
 
@@ -94,7 +103,9 @@ function EstimateRow({
     const error = validateUnitPrice(text)
     setUnitPriceError(error)
     if (!error) {
-      onUnitPriceChange(item.id, Number(normalizeNumericInput(text)))
+      const value = Number(normalizeNumericInput(text))
+      lastCommittedUnitPrice.current = value
+      onUnitPriceChange(item.id, value)
     }
   }
 
@@ -104,6 +115,7 @@ function EstimateRow({
     const original = originalQuantity.current
     setQuantityError(undefined)
     setQuantityText(String(original))
+    lastCommittedQuantity.current = original
     if (original !== item.quantity) onQuantityChange(item.id, original)
   }
 
@@ -112,31 +124,53 @@ function EstimateRow({
     const original = originalUnitPrice.current
     setUnitPriceError(undefined)
     setUnitPriceText(String(original))
+    lastCommittedUnitPrice.current = original
     if (original !== item.unitPrice) onUnitPriceChange(item.id, original)
   }
 
   /**
-   * 欄を離れないままページが終わる経路（タブを閉じる・スマホでアプリを切り替える・
-   * 裏に回って破棄される）でも、途中で確定した誤った値を残さない。
-   * blur だけを塞ぐと「30万円が1円のまま保存されて気づく手がかりが無い」状態が残る。
-   * 依存配列を付けず毎描画で貼り直し、常に最新の値を見るようにする。
+   * 画面が終わる直前の復帰。
+   *
+   * 通常の復帰は「状態を更新する → 描画後に保存する」の順で走るが、
+   * ページを閉じる・読み込み直す・別のページへ移る場面では、
+   * その「描画後の保存」まで到達しないことがある。
+   * ここでは状態更新を待たず、その場で保存まで済ませる。
    */
   useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === 'hidden') {
-        restoreQuantity()
-        restoreUnitPrice()
+    const restoreImmediately = () => {
+      const patch: Partial<EstimateItem> = {}
+      if (quantityError) patch.quantity = originalQuantity.current
+      if (unitPriceError) patch.unitPrice = originalUnitPrice.current
+      if (Object.keys(patch).length === 0) return
+
+      if (patch.quantity !== undefined) {
+        lastCommittedQuantity.current = patch.quantity
+        setQuantityText(String(patch.quantity))
+        setQuantityError(undefined)
       }
+      if (patch.unitPrice !== undefined) {
+        lastCommittedUnitPrice.current = patch.unitPrice
+        setUnitPriceText(String(patch.unitPrice))
+        setUnitPriceError(undefined)
+      }
+      onRestoreNow(item.id, patch)
     }
-    document.addEventListener('visibilitychange', onHide)
-    window.addEventListener('pagehide', onHide)
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') restoreImmediately()
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', restoreImmediately)
+    window.addEventListener('beforeunload', restoreImmediately)
     return () => {
-      document.removeEventListener('visibilitychange', onHide)
-      window.removeEventListener('pagehide', onHide)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', restoreImmediately)
+      window.removeEventListener('beforeunload', restoreImmediately)
     }
   })
 
-  // 行に誤りがあるかを親へ伝える（誤った合計を正しい体裁で見せないため）
+  // 行に誤りがあるかを親へ伝える（誤った金額を正しい体裁で見せないため）
   useEffect(() => {
     onValidityChange(item.id, Boolean(quantityError || unitPriceError))
   }, [item.id, quantityError, unitPriceError, onValidityChange])
@@ -151,6 +185,8 @@ function EstimateRow({
     onQuantityChange(item.id, next)
   }
 
+  const hasError = Boolean(quantityError || unitPriceError)
+
   return (
     <li className="item-card">
       {/* 1段目: 識別情報 */}
@@ -158,7 +194,10 @@ function EstimateRow({
         <span className="item-name" title={item.name}>
           {item.name}
         </span>
-        <span className="item-amount">{formatCurrency(calcLineAmount(item))}</span>
+        {/* 入力が誤っているあいだは、この行の金額も伏せる（サマリと基準を揃える） */}
+        <span className="item-amount">
+          {hasError ? BLANK : formatCurrency(calcLineAmount(item))}
+        </span>
       </div>
 
       {/* 2段目: 操作 */}
@@ -174,7 +213,6 @@ function EstimateRow({
             −
           </button>
           <input
-            ref={quantityRef}
             className={`stepper-value${quantityError ? ' is-error' : ''}`}
             type="text"
             inputMode="numeric"
@@ -201,7 +239,6 @@ function EstimateRow({
         <label className={`unit-field${unitPriceError ? ' is-error' : ''}`}>
           <span className="unit-mark">¥</span>
           <input
-            ref={unitPriceRef}
             className="unit-input"
             type="text"
             inputMode="numeric"
@@ -231,7 +268,7 @@ function EstimateRow({
       </div>
 
       {/* 数量と単価の両方が誤っているときは、両方見せる */}
-      {(quantityError || unitPriceError) && (
+      {hasError && (
         <div role="alert">
           <ul className="item-error">
             {quantityError && <li>{quantityError}</li>}
@@ -249,6 +286,7 @@ export function EstimateItemList({
   onUnitPriceChange,
   onRemove,
   onValidityChange,
+  onRestoreNow,
 }: Props) {
   if (items.length === 0) {
     return (
@@ -268,6 +306,7 @@ export function EstimateItemList({
           onUnitPriceChange={onUnitPriceChange}
           onRemove={onRemove}
           onValidityChange={onValidityChange}
+          onRestoreNow={onRestoreNow}
         />
       ))}
     </ul>

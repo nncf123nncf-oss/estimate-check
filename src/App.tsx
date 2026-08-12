@@ -14,7 +14,7 @@ import {
 } from './utils/calculation'
 import './App.css'
 
-const STORAGE_KEY = 'estimate-soroban.v1'
+const STORAGE_KEY = 'estimate-check.v1'
 
 interface SavedState {
   items: EstimateItem[]
@@ -102,16 +102,46 @@ function App() {
   const [rowErrors, setRowErrors] = useState<Record<string, boolean>>({})
   const fallbackRef = useRef<HTMLTextAreaElement | null>(null)
 
-  useEffect(() => {
+  // いまの状態を常に持っておく（画面が終わる直前に、描画を待たず保存するため）
+  const stateRef = useRef({ items, discountMode, discountValue, taxRate })
+  stateRef.current = { items, discountMode, discountValue, taxRate }
+
+  const persist = (nextItems: EstimateItem[]) => {
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ items, discountMode, discountValue, taxRate }),
+        JSON.stringify({ ...stateRef.current, items: nextItems }),
       )
     } catch {
       // 保存できない環境（プライベートモード等）でも計算は続けられるようにする
     }
+  }
+
+  useEffect(() => {
+    persist(items)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, discountMode, discountValue, taxRate])
+
+  /**
+   * 画面が終わる直前の復帰。
+   * 通常の経路は「状態を更新 → 描画後に保存」だが、ページを閉じる・読み込み直す場面では
+   * その保存まで到達しないことがある。ここでは状態更新を待たず、その場で保存する。
+   */
+  const handleRestoreNow = useCallback(
+    (id: string, patch: Partial<EstimateItem>) => {
+      const next = stateRef.current.items.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      )
+      stateRef.current = { ...stateRef.current, items: next }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateRef.current))
+      } catch {
+        // 保存できなくても、この後の状態更新で画面は正しくなる
+      }
+      setItems(next)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (showFallback && fallbackRef.current) {
@@ -165,16 +195,18 @@ function App() {
 
   const handleRemove = (id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id))
-    setRowErrors((prev) => {
-      if (!(id in prev)) return prev
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
   }
 
   const handleValidityChange = useCallback((id: string, hasError: boolean) => {
-    setRowErrors((prev) => (prev[id] === hasError ? prev : { ...prev, [id]: hasError }))
+    setRowErrors((prev) => {
+      if (!hasError) {
+        if (!(id in prev)) return prev
+        const next = { ...prev }
+        delete next[id]
+        return next
+      }
+      return prev[id] ? prev : { ...prev, [id]: true }
+    })
   }, [])
 
   /**
@@ -205,7 +237,7 @@ function App() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1 className="page-title">見積もりそろばん</h1>
+        <h1 className="page-title">見積チェック</h1>
         <p className="page-lead">項目を足すたびに、合計がその場で変わります</p>
       </header>
 
@@ -231,6 +263,7 @@ function App() {
           onUnitPriceChange={handleUnitPriceChange}
           onRemove={handleRemove}
           onValidityChange={handleValidityChange}
+          onRestoreNow={handleRestoreNow}
         />
 
         <EstimateForm onAdd={handleAdd} />

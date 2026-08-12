@@ -4,9 +4,9 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // GitHub Pages（https://<user>.github.io/estimate-soroban/）に置くため、
+  // GitHub Pages（https://<user>.github.io/estimate-check/）に置くため、
   // 相対パス基準を合わせる。ビルド成果物は docs/ に出し、Pages のソースに指定する。
-  base: '/estimate-soroban/',
+  base: '/estimate-check/',
   build: {
     outDir: 'docs',
   },
