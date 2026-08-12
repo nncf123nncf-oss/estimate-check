@@ -1,0 +1,87 @@
+/* 設計仕様 1章の配色をそのまま変数にする。色の判断はここ以外に書かない。 */
+:root {
+  --bg: #f6f3ee;
+  --surface: #ffffff;
+  --surface-sunk: #efeae1;
+  --border: #e4ddcf;
+  --border-strong: #8fada6;
+  --text-1: #221f1a;
+  --text-2: #5b564c;
+  --text-3: #7a7468;
+  --primary: #0f6b62;
+  --on-primary: #ffffff;
+  --danger: #b23b2e;
+  --danger-surface: #fbeae6;
+  --discount: #8a5a1f;
+
+  /* 8pxベース（設計仕様 3章） */
+  --s1: 8px;
+  --s2: 16px;
+  --s3: 24px;
+  --s4: 32px;
+  --s5: 48px;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-badge: 6px;
+
+  font-family: system-ui, -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic',
+    Meiryo, sans-serif;
+  line-height: 1.5;
+  color: var(--text-1);
+  background-color: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12191a;
+    --surface: #1b2523;
+    --surface-sunk: #161f1d;
+    --border: #263230;
+    --border-strong: #4d625c;
+    --text-1: #edeee9;
+    --text-2: #b7bdb3;
+    --text-3: #8e958b;
+    --primary: #5fcbb9;
+    --on-primary: #0d2320;
+    --danger: #e88477;
+    --danger-surface: #331f1a;
+    --discount: #d9a54b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-1);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* フォーカスは全要素で同じ形にする（設計仕様 3章） */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
